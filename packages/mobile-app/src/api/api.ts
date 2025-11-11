@@ -1,7 +1,23 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import useAuthStore from '../store/authStore';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.1.4:3000';
+// Use localhost when running on web, otherwise use the network IP
+const getApiBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_API_BASE_URL;
+  }
+
+  // On web platform, use localhost
+  if (Platform.OS === 'web') {
+    return 'http://localhost:3000';
+  }
+
+  // On mobile (iOS/Android), use network IP
+  return 'http://192.168.1.4:3000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,

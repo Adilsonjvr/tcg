@@ -11,6 +11,15 @@ async function bootstrap() {
     // Node < 17 or other environments may not support this flag.
   }
   const app = await NestFactory.create(AppModule);
+
+  // Enable CORS for all origins in development
+  app.enableCors({
+    origin: true, // Allow all origins in development
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
+
   app.use(
     json({
       limit: '1mb',
