@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Alert,
   Image,
@@ -76,6 +76,7 @@ const AddCardScreen: React.FC<Props> = ({ navigation }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const baseFilters = useMemo<CardSearchFilters>(
     () => ({
@@ -107,6 +108,29 @@ const AddCardScreen: React.FC<Props> = ({ navigation }) => {
     const nameValid = (baseFilters.name?.length ?? 0) >= 3;
     return nameValid || activeFilterCount > 0;
   }, [baseFilters.name, activeFilterCount]);
+
+  // Auto-search com debounce quando filtros mudam
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    // Só faz auto-search se tiver condições mínimas
+    if (!canSearch) {
+      return;
+    }
+
+    // Debounce de 800ms
+    debounceTimer.current = setTimeout(() => {
+      executeSearch(1, false);
+    }, 800);
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [searchTerm, supertype, rarityFilter, seriesFilter, setNameFilter, selectedSubtypes]);
 
   const createItem = useMutation({
     mutationFn: (payload: CreateInventoryPayload) => InventoryApi.createInventoryItem(payload),
@@ -191,16 +215,27 @@ const AddCardScreen: React.FC<Props> = ({ navigation }) => {
         return incoming;
       });
     } catch (error) {
+      let errorMessage = 'Não foi possível buscar cartas';
+
       if (axios.isAxiosError(error)) {
-        const serverMessage =
-          typeof error.response?.data === 'string'
+        if (error.response?.status === 400) {
+          // Erro de validação do backend - mostrar mensagem completa
+          errorMessage = typeof error.response?.data === 'string'
             ? error.response.data
-            : error.response?.data?.message ?? error.message;
-        setSearchError(serverMessage);
-      } else {
-        const message = error instanceof Error ? error.message : 'Não foi possível buscar cartas';
-        setSearchError(message);
+            : error.response?.data?.message ?? 'Parâmetros de busca inválidos';
+        } else if (error.response?.status === 503) {
+          errorMessage = 'Serviço temporariamente indisponível. Tente novamente em alguns segundos.';
+        } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMessage = 'A busca demorou muito. Tente adicionar mais filtros para reduzir os resultados.';
+        } else {
+          errorMessage = error.response?.data?.message ?? error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
       }
+
+      setSearchError(errorMessage);
+
       if (!append) {
         setSearchResults([]);
       }
@@ -275,8 +310,15 @@ const AddCardScreen: React.FC<Props> = ({ navigation }) => {
             />
           </View>
           <Text style={styles.helperText}>
-            Digite pelo menos 3 letras. Os filtros são opcionais, mas ajudam a refinar a busca. ({activeFilterCount} filtro(s) ativo(s))
+            {searchTerm.length > 0 && searchTerm.length < 3
+              ? `Digite mais ${3 - searchTerm.length} letra(s) para buscar`
+              : `A busca inicia automaticamente após digitar. Filtros: ${activeFilterCount} ativo(s)`}
           </Text>
+          {searchTerm.length >= 3 && activeFilterCount === 0 && (
+            <Text style={styles.warningText}>
+              💡 Dica: Nomes genéricos como "Pikachu" retornam muitos resultados. Use filtros!
+            </Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -363,8 +405,15 @@ const AddCardScreen: React.FC<Props> = ({ navigation }) => {
             onPress={handleSearch}
             disabled={!canSearch || searching}
           >
-            <Text style={styles.searchLabel}>{searching ? 'Buscando...' : 'Buscar cartas'}</Text>
+            <Text style={styles.searchLabel}>
+              {searching ? '🔄 Buscando...' : '🔍 Buscar agora (ou aguarde busca automática)'}
+            </Text>
           </Pressable>
+          {canSearch && !searching && (
+            <Text style={styles.helperTextCenter}>
+              A busca acontece automaticamente 0.8s após parar de digitar
+            </Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -645,6 +694,18 @@ const styles = StyleSheet.create({
   helperText: {
     color: '#6b7280',
     marginTop: 8,
+  },
+  helperTextCenter: {
+    color: '#6b7280',
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 13,
+  },
+  warningText: {
+    color: '#d97706',
+    marginTop: 8,
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   errorTextSmall: {
     color: '#b91c1c',

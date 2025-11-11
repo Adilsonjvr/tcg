@@ -71,9 +71,9 @@ export class PokemonTcgService {
   private readonly logger = new Logger(PokemonTcgService.name);
   private readonly baseUrl = process.env.POKEMONTCG_BASE_URL ?? 'https://api.pokemontcg.io/v2';
   private readonly apiKey = process.env.POKEMONTCG_API_KEY;
-  private readonly defaultPageSize = parseInt(process.env.POKEMONTCG_PAGE_SIZE ?? '50', 10);
-  private readonly maxPageSize = parseInt(process.env.POKEMONTCG_MAX_PAGE_SIZE ?? '50', 10);
-  private readonly maxPages = parseInt(process.env.POKEMONTCG_MAX_PAGES ?? '3', 10);
+  private readonly defaultPageSize = parseInt(process.env.POKEMONTCG_PAGE_SIZE ?? '20', 10);
+  private readonly maxPageSize = parseInt(process.env.POKEMONTCG_MAX_PAGE_SIZE ?? '30', 10);
+  private readonly maxPages = parseInt(process.env.POKEMONTCG_MAX_PAGES ?? '5', 10);
   private readonly defaultSelect =
     'id,name,number,rarity,supertype,subtypes,set.name,set.series,images.small,images.large,tcgplayer.productId,cardmarket.id';
   private readonly cache = new MemoryCache<PokemonCardSearchResult>(

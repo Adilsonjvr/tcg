@@ -101,11 +101,25 @@ export class InventoryController {
     );
 
     if (!hasName && !hasAdditionalFilters) {
-      throw new BadRequestException('provide a name with at least 3 characters or add another filter');
+      throw new BadRequestException('Digite ao menos 3 letras do nome da carta OU selecione filtros adicionais (tipo, raridade, série, etc)');
     }
 
     if (filters.name && filters.name.length < 3) {
-      throw new BadRequestException('name must have at least 3 characters when provided');
+      throw new BadRequestException('O nome deve ter pelo menos 3 caracteres');
+    }
+
+    // Para nomes genéricos, exigir filtros adicionais
+    const commonNames = ['pikachu', 'charizard', 'mewtwo', 'mew', 'eevee', 'snorlax', 'gengar', 'dragonite'];
+    if (hasName && !hasAdditionalFilters) {
+      const lowerName = filters.name.toLowerCase();
+      const isCommon = commonNames.some(common => lowerName.includes(common) && lowerName.length <= common.length + 2);
+
+      if (isCommon) {
+        throw new BadRequestException(
+          `"${filters.name}" é muito genérico e retorna muitos resultados. ` +
+          'Adicione filtros como: Tipo (Pokémon/Trainer), Raridade, Série ou nome mais específico (ex: "Pikachu VMAX")'
+        );
+      }
     }
 
     return filters;
