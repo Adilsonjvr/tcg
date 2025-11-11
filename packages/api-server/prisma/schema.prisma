@@ -1,0 +1,362 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MENOR
+  RESPONSAVEL
+  ADULTO
+  VENDEDOR
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  IN_PROGRESS
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum KycProvider {
+  STRIPE
+}
+
+enum InventoryVisibility {
+  PESSOAL
+  EVENTO
+  PUBLICO
+}
+
+enum InventoryStatus {
+  DISPONIVEL
+  EM_PROPOSTA
+  VENDIDO
+  ARQUIVADO
+}
+
+enum CardCondition {
+  MINT
+  NEAR_MINT
+  EXCELLENT
+  GOOD
+  LIGHT_PLAYED
+  PLAYED
+  POOR
+}
+
+enum CardLanguage {
+  EN
+  PT
+  ES
+  FR
+  DE
+  IT
+  JA
+  KO
+  ZH
+  OTHER
+}
+
+enum EventStatus {
+  RASCUNHO
+  PENDENTE_VALIDACAO
+  VALIDADO
+  CANCELADO
+}
+
+enum EventParticipationStatus {
+  PENDENTE_UTILIZADOR
+  PENDENTE_APROVACAO_PARENTAL
+  CONFIRMADO
+  REJEITADO
+  CANCELADO
+}
+
+enum TradeStatus {
+  PENDENTE_UTILIZADOR
+  PENDENTE_APROVACAO_PARENTAL
+  ACEITE
+  REJEITADO
+  CANCELADA
+  CONCLUIDA
+}
+
+enum TradeParticipantSide {
+  PROPONENTE
+  RECETOR
+}
+
+enum ParentalApprovalStatus {
+  PENDENTE
+  APROVADO
+  REJEITADO
+}
+
+enum PriceSource {
+  JUST_TCG
+  RAPID_API
+  MANUAL
+}
+
+model User {
+  id                        String    @id @default(cuid())
+  email                     String    @unique
+  passwordHash              String
+  nome                      String
+  nascimento                DateTime
+  role                      UserRole
+  responsavelId             String?
+  parentLinkCode            String?   @unique
+  parentLinkCodeExpiresAt   DateTime?
+  isKycVerified             Boolean   @default(false)
+  kycStatus                 KycStatus @default(PENDING)
+  stripeCustomerId          String?
+  stripeVerificationSession String?
+  streamUserId              String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  responsavel            User?                @relation("UserDependents", fields: [responsavelId], references: [id])
+  dependentes            User[]               @relation("UserDependents")
+  inventoryItems         InventoryItem[]
+  eventParticipations    EventParticipation[]
+  eventsHosted           Event[]              @relation("EventHost")
+  tradesPropostas        Trade[]              @relation("TradeProposer")
+  tradesRecebidas        Trade[]              @relation("TradeReceiver")
+  approvalsEmitidas      TradeApproval[]      @relation("TradeApprovalResponsible")
+  eventParentalDecisions EventParticipation[] @relation("EventParentalDecider")
+  vendorSales            SaleRecord[]
+  kycVerifications       KycVerification[]
+
+  @@index([role])
+  @@index([responsavelId])
+}
+
+model CardDefinition {
+  id                 String   @id
+  nome               String
+  serie              String?
+  setName            String?
+  setCode            String?
+  collectorNumber    String?
+  rarity             String?
+  supertype          String?
+  subtypes           String?
+  artist             String?
+  smallImageUrl      String?
+  largeImageUrl      String?
+  cardMarketId       String?
+  tcgPlayerProductId String?
+  rawData            Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  inventoryItems InventoryItem[]
+  priceSnapshots CardPriceSnapshot[]
+
+  @@index([nome])
+  @@index([setCode, collectorNumber])
+}
+
+model InventoryItem {
+  id                 String              @id @default(cuid())
+  ownerId            String
+  cardDefinitionId   String
+  condition          CardCondition
+  language           CardLanguage        @default(EN)
+  quantity           Int                 @default(1)
+  visibility         InventoryVisibility @default(PESSOAL)
+  status             InventoryStatus     @default(DISPONIVEL)
+  aquisicaoFonte     String?
+  precoCompra        Decimal?            @db.Decimal(12, 2)
+  precoVendaDesejado Decimal?            @db.Decimal(12, 2)
+  valorEstimado      Decimal?            @db.Decimal(12, 2)
+  observacoes        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  owner          User           @relation(fields: [ownerId], references: [id])
+  cardDefinition CardDefinition @relation(fields: [cardDefinitionId], references: [id])
+  tradeItems     TradeItem[]
+  saleRecords    SaleRecord[]
+
+  @@index([ownerId])
+  @@index([cardDefinitionId])
+  @@index([status, visibility])
+}
+
+model Event {
+  id           String      @id @default(cuid())
+  slug         String      @unique
+  titulo       String
+  descricao    String?
+  hostId       String
+  venueName    String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  country      String?
+  postalCode   String?
+  latitude     Decimal?    @db.Decimal(10, 7)
+  longitude    Decimal?    @db.Decimal(10, 7)
+  startAt      DateTime
+  endAt        DateTime
+  status       EventStatus @default(PENDENTE_VALIDACAO)
+  capacidade   Int?
+  validatedAt  DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  host          User                 @relation("EventHost", fields: [hostId], references: [id])
+  participacoes EventParticipation[]
+  trades        Trade[]
+
+  @@index([status, startAt])
+}
+
+model EventParticipation {
+  id                   String                   @id @default(cuid())
+  eventId              String
+  userId               String
+  status               EventParticipationStatus @default(PENDENTE_UTILIZADOR)
+  parentalStatus       ParentalApprovalStatus?
+  parentalDecidedById  String?
+  parentalDecidedAt    DateTime?
+  parentalDecisionNote String?
+  checkedInAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  event             Event @relation(fields: [eventId], references: [id])
+  user              User  @relation(fields: [userId], references: [id])
+  parentalDecidedBy User? @relation("EventParentalDecider", fields: [parentalDecidedById], references: [id])
+
+  @@unique([eventId, userId])
+  @@index([status])
+  @@index([parentalStatus])
+}
+
+model Trade {
+  id                     String      @id @default(cuid())
+  eventId                String
+  proponenteId           String
+  recetorId              String
+  status                 TradeStatus @default(PENDENTE_UTILIZADOR)
+  proponenteDinheiro     Decimal?    @db.Decimal(12, 2)
+  recetorDinheiro        Decimal?    @db.Decimal(12, 2)
+  avaliacaoProponente    Decimal?    @db.Decimal(12, 2)
+  avaliacaoRecetor       Decimal?    @db.Decimal(12, 2)
+  diferencaValorAbsoluta Decimal?    @db.Decimal(12, 2)
+  diferencaPercentual    Decimal?    @db.Decimal(5, 2)
+  chatChannelId          String?
+  proponenteHandshakeAt  DateTime?
+  recetorHandshakeAt     DateTime?
+  acceptedAt             DateTime?
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  event      Event           @relation(fields: [eventId], references: [id])
+  proponente User            @relation("TradeProposer", fields: [proponenteId], references: [id])
+  recetor    User            @relation("TradeReceiver", fields: [recetorId], references: [id])
+  items      TradeItem[]
+  approvals  TradeApproval[]
+
+  @@index([eventId])
+  @@index([status])
+  @@index([proponenteId])
+  @@index([recetorId])
+}
+
+model TradeItem {
+  id              String               @id @default(cuid())
+  tradeId         String
+  inventoryItemId String
+  side            TradeParticipantSide
+  valuation       Decimal?             @db.Decimal(12, 2)
+  createdAt       DateTime             @default(now())
+
+  trade         Trade         @relation(fields: [tradeId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([tradeId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+model TradeApproval {
+  id            String                 @id @default(cuid())
+  tradeId       String
+  responsavelId String
+  status        ParentalApprovalStatus @default(PENDENTE)
+  decisionAt    DateTime?
+  decisionNote  String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  trade       Trade @relation(fields: [tradeId], references: [id])
+  responsavel User  @relation("TradeApprovalResponsible", fields: [responsavelId], references: [id])
+
+  @@unique([tradeId, responsavelId])
+  @@index([status])
+}
+
+model SaleRecord {
+  id              String   @id @default(cuid())
+  vendorId        String
+  inventoryItemId String
+  precoVenda      Decimal  @db.Decimal(12, 2)
+  vendidoEm       DateTime @default(now())
+  compradorNome   String?
+  notas           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vendor        User          @relation(fields: [vendorId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([inventoryItemId])
+  @@index([vendorId])
+}
+
+model KycVerification {
+  id          String      @id @default(cuid())
+  userId      String
+  provider    KycProvider
+  sessionId   String
+  status      KycStatus   @default(PENDING)
+  payload     Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, sessionId])
+  @@index([userId, status])
+}
+
+model CardPriceSnapshot {
+  id               String      @id @default(cuid())
+  cardDefinitionId String
+  source           PriceSource
+  currency         String      @default("USD")
+  low              Decimal?    @db.Decimal(12, 2)
+  mid              Decimal?    @db.Decimal(12, 2)
+  high             Decimal?    @db.Decimal(12, 2)
+  market           Decimal?    @db.Decimal(12, 2)
+  createdAt        DateTime    @default(now())
+
+  cardDefinition CardDefinition @relation(fields: [cardDefinitionId], references: [id])
+
+  @@index([cardDefinitionId, source])
+  @@index([createdAt])
+}
