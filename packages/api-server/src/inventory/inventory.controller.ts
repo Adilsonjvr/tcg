@@ -110,7 +110,7 @@ export class InventoryController {
 
     // Para nomes genéricos, exigir filtros adicionais
     const commonNames = ['pikachu', 'charizard', 'mewtwo', 'mew', 'eevee', 'snorlax', 'gengar', 'dragonite'];
-    if (hasName && !hasAdditionalFilters) {
+    if (hasName && !hasAdditionalFilters && filters.name) {
       const lowerName = filters.name.toLowerCase();
       const isCommon = commonNames.some(common => lowerName.includes(common) && lowerName.length <= common.length + 2);
 
